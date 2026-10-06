@@ -84,6 +84,17 @@ def init_db():
     ''')
     
     conn.commit()
+    
+    # Auto-fix absolute paths in photo_url on startup
+    cursor.execute("SELECT id, photo_url FROM items WHERE photo_url IS NOT NULL")
+    for row in cursor.fetchall():
+        if row[1] and ('\\' in row[1] or '/' in row[1]):
+            filename = row[1].replace('\\', '/').split('/')[-1]
+            new_path = os.path.join(DATA_DIR, 'photos', filename)
+            if row[1] != new_path:
+                cursor.execute("UPDATE items SET photo_url = ? WHERE id = ?", (new_path, row[0]))
+                
+    conn.commit()
     conn.close()
 
 # Automatically initialize database tables if they do not exist

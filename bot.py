@@ -198,10 +198,14 @@ async def cmd_style(message: types.Message):
 
     items_by_id = {i['id']: i for i in available_items}
     image_sources = []
+    data_dir = os.getenv('DATA_DIR', '/data' if os.path.isdir('/data') else os.path.dirname(__file__))
     for item_id in mentioned_ids:
         item = items_by_id.get(item_id)
         if item and item.get('photo_url'):
-            image_sources.append(item['photo_url'])
+            filename = item['photo_url'].replace('\\', '/').split('/')[-1]
+            actual_path = os.path.join(data_dir, 'photos', filename)
+            if os.path.exists(actual_path):
+                image_sources.append(actual_path)
         if len(image_sources) >= 4:
             break
     if image_sources:
@@ -274,15 +278,29 @@ async def process_show_photo(callback: CallbackQuery):
     res = c.fetchone()
     conn.close()
     
-    if res and res[0] and os.path.exists(res[0]):
-        try:
-            await callback.message.answer_photo(FSInputFile(res[0]), caption=f"Вещь #{item_id}")
-            await callback.answer()
-        except Exception as e:
-            logger.error(f"Failed to send photo for item {item_id}: {e}")
-            await callback.answer("Ошибка при отправке фото", show_alert=True)
-    else:
-        await callback.answer("Фотографии для этой вещи нет", show_alert=True)
+    if res and res[0]:
+        photo_val = res[0]
+        # Robust path resolution: grab the filename only
+        filename = photo_val.replace('\\', '/').split('/')[-1]
+        data_dir = os.getenv('DATA_DIR', '/data' if os.path.isdir('/data') else os.path.dirname(__file__))
+        actual_path = os.path.join(data_dir, 'photos', filename)
+        
+        if os.path.exists(actual_path):
+            try:
+                await callback.message.answer_photo(FSInputFile(actual_path), caption=f"Вещь #{item_id}")
+                await callback.answer()
+                return
+            except Exception as e:
+                logger.error(f"Failed to send photo for item {item_id}: {e}")
+                await callback.answer("Ошибка при отправке фото", show_alert=True)
+                return
+        else:
+            files = os.listdir(os.path.join(data_dir, 'photos')) if os.path.exists(os.path.join(data_dir, 'photos')) else []
+            debug_info = f"Нет фото! Искал: {actual_path}. Папка существует: {os.path.exists(os.path.join(data_dir, 'photos'))}. Файлов в ней: {len(files)}"
+            await callback.answer(debug_info, show_alert=True)
+            return
+
+    await callback.answer("Фотографии для этой вещи нет в базе", show_alert=True)
 
 @dp.message(lambda msg: msg.photo is not None)
 async def handle_photo(message: types.Message):
