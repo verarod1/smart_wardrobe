@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from db import get_connection
 from weather import get_weather_forecast
 from logic import calculate_packing
-from ai import get_outfits, auto_tag_image_bytes
+from ai import get_outfits, auto_tag_image_bytes, check_city_dress_code
 from visuals import create_moodboard
 
 load_dotenv()
@@ -78,7 +78,12 @@ async def cmd_pack(message: types.Message):
         
     t_min = weather_info['temp_min']
     t_max = weather_info['temp_max']
-    await message.reply(f"Погода в {city} ({date_str}, {days} дн.): от {t_min}°C до {t_max}°C, {weather_info['condition']}. Собираю чемодан...")
+    
+    await message.reply("🌎 Анализирую культурные особенности и дресс-код страны...")
+    dress_code = await check_city_dress_code(city)
+    dc_msg = "‼️Строгий/консервативный (исключаю мини и открытые наряды)" if dress_code == 'conservative' else "Стандартный (свободный)"
+    
+    await message.reply(f"Погода в {city} ({date_str}, {days} дн.): от {t_min}°C до {t_max}°C, {weather_info['condition']}.\nДресс-код: {dc_msg}.\nСобираю чемодан...")
     
     conn = get_connection()
     c = conn.cursor()
@@ -90,7 +95,7 @@ async def cmd_pack(message: types.Message):
     history_freq = {row[0]: row[1] for row in c.fetchall()}
     conn.close()
     
-    packed, total_weight, recommendations = calculate_packing(all_items, history_freq, t_min, t_max, limit_kg)
+    packed, total_weight, recommendations = calculate_packing(all_items, history_freq, t_min, t_max, limit_kg, dress_code)
     
     response = f"🧳 Собрано {len(packed)} вещей. Общий вес: {total_weight / 1000} кг.\n\n"
     
@@ -149,6 +154,24 @@ async def cmd_pack(message: types.Message):
             await message.reply(response, reply_markup=keyboard)
         else:
             await message.reply(response)
+            
+    if packed:
+        checklist_lines = [f"🧳 ЧЕК-ЛИСТ ДЛЯ СБОРОВ: {city.upper()} ({days} дн.)\n"]
+        for cat, items_in_cat in categorized.items():
+            checklist_lines.append(f"\n{cat.upper()}:")
+            for p in items_in_cat:
+                p_desc = p.get('style_note', '')
+                desc_text = f" - {p_desc}" if p_desc else ""
+                checklist_lines.append(f" [ ] {p.get('color', 'unknown')} {p.get('type', 'unknown')}{desc_text} (ID: {p.get('id')})")
+        
+        checklist_path = os.path.join(os.getenv('DATA_DIR', '.'), f"checklist.txt")
+        with open(checklist_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(checklist_lines))
+            
+        try:
+            await message.reply_document(FSInputFile(checklist_path), caption="📝 Ваш чеклист (удобно распечатать/отметить)!")
+        except Exception as e:
+            logger.error(f"Error sending checklist: {e}")
 
 @dp.message(Command("style"))
 async def cmd_style(message: types.Message):

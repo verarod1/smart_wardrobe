@@ -206,3 +206,24 @@ async def auto_tag_image_bytes(image_bytes: bytes) -> dict:
         
     # Parse it nicely
     return json.loads(text.strip())
+
+async def check_city_dress_code(city: str) -> str:
+    """Uses GigaChat to determine if a city has strict dress-code rules."""
+    if not GIGACHAT_AUTH_KEY:
+        return "standard"
+
+    full_prompt = (
+        f"You are a travel advisor. The user is traveling to: {city}. "
+        "Determine if this location has a strictly conservative or religious public dress code (e.g. Muslim countries like UAE, Iran, Saudi Arabia, or highly traditional areas) where tourists are expected to avoid mini-skirts, short shorts, crop tops, and revealing clothes in public. "
+        "Return ONLY the word 'conservative' if they should avoid revealing clothes, or 'standard' if normal Western casual wear is acceptable. "
+        "Do not output anything else."
+    )
+    try:
+        text = await call_gigachat_api(full_prompt)
+        text = text.strip().lower()
+        if "conservative" in text:
+            return "conservative"
+        return "standard"
+    except Exception as e:
+        logger.error(f"GigaChat dress-code error: {e}")
+        return "standard"

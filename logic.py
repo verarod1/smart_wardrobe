@@ -1,7 +1,7 @@
 from weather import get_season_strategy_range
 import random
 
-def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp_max: float, max_weight_kg: float) -> tuple:
+def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp_max: float, max_weight_kg: float, dress_code: str = 'standard') -> tuple:
     """
     all_items is a list of dicts from the db.
     history_freq is a dictionary mapping item_id -> int (number of times worn recently).
@@ -23,6 +23,12 @@ def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp
             if temp_max <= 5 and i['season'] not in ('winter', 'demi', 'all'):
                 continue
             if temp_min >= 20 and i['season'] not in ('summer', 'all'):
+                continue
+                
+        if dress_code == 'conservative':
+            sn = (i.get('style_note') or '').lower()
+            t_low = t.lower()
+            if any(w in sn or w in t_low for w in ['мини', 'шорты', 'топик', 'коротк', 'декольте', 'открыт', 'mini', 'crop']):
                 continue
                 
         season_items.append(i)
