@@ -29,11 +29,28 @@ def calculate_packing(all_items: list, history_freq: dict, temp: float, max_weig
     
     # Shuffle for randomness, but then sort by usage frequency (favoring items with lower history count)
     random.shuffle(season_items) 
-    season_items.sort(key=lambda x: history_freq.get(x['id'], 0))
     
     main_items = [i for i in season_items if i.get('category') != 'underwear' and i.get('type') != 'underwear']
     underwear_items = [i for i in season_items if i.get('category') == 'underwear' or i.get('type') == 'underwear']
     
+    # Sort main_items by priority so essentials are packed first, then by history frequency
+    priority_map = {
+        'evening_dress': 1,
+        'business_suit': 1,
+        'sport_top': 2,
+        'sport_bottom': 2,
+        'shoes': 3,
+        'bag': 3,
+        'outer': 3,
+        'casual_top': 4,
+        'casual_bottom': 4
+    }
+    
+    main_items.sort(key=lambda x: (
+        priority_map.get(x.get('type') or '', 5),
+        history_freq.get(x['id'], 0)
+    ))
+
     available_sport_tops = sum(1 for i in season_items if i.get('type') == 'sport_top')
     available_sport_bottoms = sum(1 for i in season_items if i.get('type') == 'sport_bottom')
     # Force strictly matched sets
@@ -61,6 +78,9 @@ def calculate_packing(all_items: list, history_freq: dict, temp: float, max_weig
     counts['underwear'] = 0
     main_colors = set()
     
+    # Reserve weight for underwear (up to 10 pairs ~ 500g total if available)
+    reserved_weight = min(10, len(underwear_items)) * 50 if len(underwear_items) > 0 else 0
+    
     for item in main_items:
         t = item.get('type', '')
         
@@ -79,7 +99,8 @@ def calculate_packing(all_items: list, history_freq: dict, temp: float, max_weig
                 continue
             
         w = item['weight_grams']
-        if total_weight + w <= max_grams:
+        # Pack if fits within max_grams MINUS reserved_weight
+        if total_weight + w <= (max_grams - reserved_weight):
             packed.append(item)
             total_weight += w
             if t in counts:
@@ -98,41 +119,71 @@ def calculate_packing(all_items: list, history_freq: dict, temp: float, max_weig
             return 1  # Matches neutral
         return 2  # Other
         
+    # Sort so best matching are first, then by frequency
     underwear_items.sort(key=lambda x: (uw_score(x), history_freq.get(x['id'], 0)))
     
     for item in underwear_items:
         if counts['underwear'] >= 10:
             break
             
-        if uw_score(item) == 2:
-            continue # Skip non-matching non-neutral underwear!
+        is_bad_match = (uw_score(item) == 2)
+        
+        # We enforce matching constraint in general, BUT user requested:
+        # "в любом чемодане должно быть минимум 2 пары белья (если они не подходят по цвету то так и написать, что взяты из необходимости или базовые)"
+        if is_bad_match and counts['underwear'] >= 2:
+            continue
             
         w = item['weight_grams']
+        # Since we reserved weight earlier, we now can use up to max_grams
         if total_weight + w <= max_grams:
-            packed.append(item)
+            item_to_add = item.copy()
+            if is_bad_match:
+                item_to_add['style_note'] = item_to_add.get('style_note', '') + " (взято из необходимости)"
+                
+            packed.append(item_to_add)
             total_weight += w
             counts['underwear'] += 1
                 
-    # Check if we at least met minimums where possible
+    # Count totals in wardrobe to not ask to buy items they already own
+    in_wardrobe = {}
+    for i in all_items:
+        t = i.get('type', '')
+        if t == 'casual_tshirt': t = 'casual_top'
+        if t == 'outerwear': t = 'outer'
+        in_wardrobe[t] = in_wardrobe.get(t, 0) + 1
+        if i.get('category') == 'underwear' or i.get('type') == 'underwear':
+            in_wardrobe['underwear'] = in_wardrobe.get('underwear', 0) + 1
+
     recs = []
     
     if counts.get('sport_top', 0) < 4:
-        missing_sport = 4 - counts.get('sport_top', 0)
-        recs.append(f" - Спортивной одежды: докупить {missing_sport} комплекта (верх+низ).")
-        
+        missing_wardrobe = max(0, 4 - in_wardrobe.get('sport_top', 0))
+        if missing_wardrobe > 0:
+            recs.append(f" - Спортивной одежды: докупить {missing_wardrobe} комплекта.")
+        elif in_wardrobe.get('sport_top', 0) >= 4:
+            recs.append(" - Спортивной одежды: есть в гардеробе, но не поместилось по весу/лимиту.")
+            
     if counts.get('underwear', 0) < 10:
-        missing_uw = 10 - counts.get('underwear', 0)
-        cname = "базового"
+        missing_w = max(0, 10 - in_wardrobe.get('underwear', 0))
+        cname = "базового/нейтрального"
         if main_colors:
-            # find the most common color or just pick one
             cname = list(main_colors)[0]
-        recs.append(f" - Нижнего белья: докупить еще {missing_uw} штук (рекомендуемый цвет, подходящий к вещам: {cname}).")
+        if missing_w > 0:
+            recs.append(f" - Нижнего белья: докупить еще {missing_w} штук (рекомендуемый цвет: {cname}).")
+        else:
+            recs.append(" - Нижнего белья: есть в гардеробе, но не поместилось по весу или не подошло по цвету.")
         
     if counts.get('evening_dress', 0) == 0:
-        recs.append(" - Вечерней одежды: докупить вечерний наряд.")
+        if in_wardrobe.get('evening_dress', 0) == 0:
+            recs.append(" - Вечерней одежды: докупить вечерний наряд.")
+        else:
+            recs.append(" - Вечерней одежды: есть в гардеробе, но не подошло по сезону или весу.")
         
     if counts.get('business_suit', 0) == 0:
-        recs.append(" - Деловой одежды: докупить строгий деловой костюм.")
+        if in_wardrobe.get('business_suit', 0) == 0:
+            recs.append(" - Деловой одежды: докупить строгий деловой костюм.")
+        else:
+            recs.append(" - Деловой одежды: есть в гардеробе, но не подошло по сезону или весу.")
         
     msg = "\n".join(recs)
         
