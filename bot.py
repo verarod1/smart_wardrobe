@@ -165,7 +165,7 @@ async def cmd_pack(message: types.Message):
                 checklist_lines.append(f" [ ] {p.get('color', 'unknown')} {p.get('type', 'unknown')}{desc_text} (ID: {p.get('id')})")
         
         checklist_path = os.path.join(os.getenv('DATA_DIR', '.'), f"checklist.txt")
-        with open(checklist_path, "w", encoding="utf-8") as f:
+        with open(checklist_path, "w", encoding="utf-8-sig") as f:
             f.write("\n".join(checklist_lines))
             
         try:
