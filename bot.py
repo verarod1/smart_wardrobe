@@ -52,7 +52,7 @@ async def cmd_wardrobe(message: types.Message):
     text = f"👗 Гардероб ({len(items)} вещей, новые сверху):\n\n"
     for i in items[:30]:  # Show up to 30
         desc = f" | {i[6]}" if i[6] else ""
-        text += f"[{i[0]}] {i[2]} {i[1]} ({i[3]}) — {i[4]}г, {i[5]}{desc}\n"
+        text += f"{i[0]}) {i[2]} {i[1]} ({i[3]}) — {i[4]}г, {i[5]}{desc}\n"
     if len(items) > 30:
         text += f"\n...и ещё {len(items) - 30} вещей."
     await message.reply(text)
@@ -125,7 +125,7 @@ async def cmd_pack(message: types.Message):
             p_id = p.get('id', '?')
             p_desc = p.get('style_note', '')
             desc_text = f" - {p_desc}" if p_desc else ""
-            response += f" - [{p_id}] {p.get('color', 'unknown')} {p.get('type', 'unknown')} ({p.get('weight_grams', 0)}г){desc_text}\n"
+            response += f"{p_id}) {p.get('color', 'unknown')} {p.get('type', 'unknown')} ({p.get('weight_grams', 0)}г){desc_text}\n"
         response += "\n"
         
     # Split by chunks safely
