@@ -175,11 +175,16 @@ async def cmd_style(message: types.Message):
         if not mentioned_ids:
             mentioned_ids = set(map(int, re.findall(r'ID[:\s]*(\d+)', outfits_text_full)))
 
+    valid_ids = {i['id'] for i in available_items}
+    all_numbers_ai = set(map(int, re.findall(r'\b\d+\b', outfits_text_full)))
+    all_numbers_user = set(map(int, re.findall(r'\b\d+\b', prompt)))
+    all_mentioned_ids = (all_numbers_ai | all_numbers_user) & valid_ids
+
     keyboard = None
-    if mentioned_ids:
+    if all_mentioned_ids:
         keyboard = InlineKeyboardMarkup(inline_keyboard=[])
         row = []
-        for pid in sorted(list(mentioned_ids)):
+        for pid in sorted(list(all_mentioned_ids)):
             row.append(InlineKeyboardButton(text=f"📷 #{pid}", callback_data=f"show_photo_{pid}"))
             if len(row) >= 4:
                 keyboard.inline_keyboard.append(row)
