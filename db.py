@@ -42,6 +42,5 @@ def init_db():
     conn.commit()
     conn.close()
 
-if __name__ == '__main__':
-    init_db()
-    print("Database initialized.")
+# Automatically initialize database tables if they do not exist
+init_db()
