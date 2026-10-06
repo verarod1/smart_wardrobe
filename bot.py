@@ -8,7 +8,7 @@ from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButto
 from dotenv import load_dotenv
 
 from db import get_connection
-from weather import get_weather
+from weather import get_weather_forecast
 from logic import calculate_packing
 from ai import get_outfits, auto_tag_image_bytes
 from visuals import create_moodboard
@@ -30,7 +30,7 @@ async def send_welcome(message: types.Message):
         "Добро пожаловать в твой AI Гардероб!\n"
         "Команды:\n"
         "/wardrobe - Посмотреть вещи\n"
-        "/pack <город> <дни> <лимит_веса_кг> - Напр. /pack Dubai 28 17\n"
+        "/pack <город> <дни> <дата(ДД.ММ.ГГГГ)> <лимит_веса_кг> - Напр. /pack Dubai 7 15.10.2026 17\n"
         "/style <описание_или_ID> - Напр. /style green skirt или /style 60\n"
         "/delete <ID> - Удалить вещь\n"
         "/edit <ID> <поле> <значение> - Напр. /edit 60 brand Prada\n"
@@ -59,19 +59,26 @@ async def cmd_wardrobe(message: types.Message):
 
 @dp.message(Command("pack"))
 async def cmd_pack(message: types.Message):
-    parts = message.text.split(maxsplit=3)
-    if len(parts) < 4:
-        return await message.reply("Использование: /pack <город> <дни> <лимит_веса_кг>")
+    parts = message.text.split()
+    if len(parts) < 5:
+        return await message.reply("Использование: /pack <город> <дни> <дата_отправления(ДД.ММ.ГГГГ)> <лимит_веса_кг>")
         
-    city = parts[1]
-    limit_kg = float(parts[3])
+    try:
+        limit_kg = float(parts[-1])
+        date_str = parts[-2]
+        days = int(parts[-3])
+        city = " ".join(parts[1:-3])
+    except ValueError:
+        return await message.reply("Ошибка: проверьте правильность ввода чисел (дни и вес).")
     
-    weather_info = await get_weather(city)
+    from weather import get_weather_forecast
+    weather_info = await get_weather_forecast(city, date_str, days)
     if 'error' in weather_info:
         return await message.reply(f"❌ Ошибка получения погоды: {weather_info['error']}")
         
-    temp = weather_info['temp']
-    await message.reply(f"Погода в {city}: {temp}°C, {weather_info['condition']}. Собираю чемодан...")
+    t_min = weather_info['temp_min']
+    t_max = weather_info['temp_max']
+    await message.reply(f"Погода в {city} ({date_str}, {days} дн.): от {t_min}°C до {t_max}°C, {weather_info['condition']}. Собираю чемодан...")
     
     conn = get_connection()
     c = conn.cursor()
@@ -83,7 +90,7 @@ async def cmd_pack(message: types.Message):
     history_freq = {row[0]: row[1] for row in c.fetchall()}
     conn.close()
     
-    packed, total_weight, recommendations = calculate_packing(all_items, history_freq, temp, limit_kg)
+    packed, total_weight, recommendations = calculate_packing(all_items, history_freq, t_min, t_max, limit_kg)
     
     response = f"🧳 Собрано {len(packed)} вещей. Общий вес: {total_weight / 1000} кг.\n\n"
     

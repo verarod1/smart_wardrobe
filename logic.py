@@ -1,7 +1,7 @@
-from weather import get_season_strategy
+from weather import get_season_strategy_range
 import random
 
-def calculate_packing(all_items: list, history_freq: dict, temp: float, max_weight_kg: float) -> tuple:
+def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp_max: float, max_weight_kg: float) -> tuple:
     """
     all_items is a list of dicts from the db.
     history_freq is a dictionary mapping item_id -> int (number of times worn recently).
@@ -9,7 +9,7 @@ def calculate_packing(all_items: list, history_freq: dict, temp: float, max_weig
     Returns (packed_items (list of dicts), total_weight_grams, message).
     """
     max_grams = int(max_weight_kg * 1000)
-    valid_season = get_season_strategy(temp)
+    valid_season = get_season_strategy_range(temp_min, temp_max)
     
     # Filter items that fit the season, with strict rules for shoes
     season_items = []
@@ -20,9 +20,9 @@ def calculate_packing(all_items: list, history_freq: dict, temp: float, max_weig
         c = (i.get('category') or '').lower()
         t = (i.get('type') or '').lower()
         if c == 'shoes' or 'shoe' in t:
-            if temp <= 5 and i['season'] not in ('winter', 'demi'):
+            if temp_max <= 5 and i['season'] not in ('winter', 'demi', 'all'):
                 continue
-            if temp >= 20 and i['season'] not in ('summer', 'all'):
+            if temp_min >= 20 and i['season'] not in ('summer', 'all'):
                 continue
                 
         season_items.append(i)
