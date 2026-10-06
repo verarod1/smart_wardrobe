@@ -22,6 +22,10 @@ def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp
         if c == 'shoes' or 'shoe' in t:
             if temp_max <= 5 and i['season'] not in ('winter', 'demi', 'all'):
                 continue
+            if temp_max >= 25 and i['season'] not in ('summer', 'all'):
+                continue
+            if temp_max > 15 and i['season'] == 'winter':
+                continue
             if temp_min >= 20 and i['season'] not in ('summer', 'all'):
                 continue
                 
@@ -44,7 +48,6 @@ def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp
         if i.get('type') == 'casual_tshirt': i['type'] = 'casual_top'
         if i.get('type') == 'outerwear': i['type'] = 'outer'
     
-    # Sort main_items by priority so essentials are packed first, then by history frequency
     priority_map = {
         'outer': 0 if temp_min < 15 else 3,
         'evening_dress': 1,
@@ -57,8 +60,20 @@ def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp
         'casual_bottom': 4
     }
     
+    def get_priority(x):
+        t = x.get('type') or ''
+        base_prio = priority_map.get(t, 5)
+        # Prioritize formal bags if a formal outfit is available
+        if t == 'bag':
+            has_formal_outfit = any(i.get('type') in ['evening_dress', 'business_suit'] for i in season_items)
+            sn = (x.get('style_note') or '').lower()
+            is_formal_bag = any(w in sn for w in ['клатч', 'вечерн', 'строг'])
+            if has_formal_outfit and is_formal_bag:
+                return 2.5
+        return base_prio
+
     main_items.sort(key=lambda x: (
-        priority_map.get(x.get('type') or '', 5),
+        get_priority(x),
         history_freq.get(x['id'], 0)
     ))
 
@@ -88,6 +103,7 @@ def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp
     counts = {k: 0 for k in categories.keys()}
     counts['underwear'] = 0
     main_colors = set()
+    packed_bag_styles = set()
     
     # Reserve weight for underwear (up to 10 pairs ~ 500g total if available)
     reserved_weight = min(10, len(underwear_items)) * 50 if len(underwear_items) > 0 else 0
@@ -102,6 +118,13 @@ def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp
             # Prevent unknown types from flooding (limit to 1 item per unknown type)
             if counts.get(t, 0) >= 1:
                 continue
+                
+        # Prevent identical bag styles
+        if t == 'bag':
+            sn = (item.get('style_note') or '').lower()
+            style_sig = next((w for w in ['шоппер', 'рюкзак', 'соломен', 'поясн', 'клатч', 'кросс-боди', 'вечерн', 'строг'] if w in sn), None)
+            if style_sig and style_sig in packed_bag_styles:
+                continue
             
         w = item['weight_grams']
         # Pack if fits within max_grams MINUS reserved_weight
@@ -110,6 +133,8 @@ def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp
             total_weight += w
             if t in counts:
                 counts[t] += 1
+            if t == 'bag' and style_sig:
+                packed_bag_styles.add(style_sig)
             if item.get('color') and t not in ('bag', 'shoes', 'accessory', 'jewelry'):
                 main_colors.add(item['color'].lower())
                 
