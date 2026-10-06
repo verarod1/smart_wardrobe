@@ -33,15 +33,20 @@ def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp
     main_items = [i for i in season_items if i.get('category') != 'underwear' and i.get('type') != 'underwear']
     underwear_items = [i for i in season_items if i.get('category') == 'underwear' or i.get('type') == 'underwear']
     
+    # Normalize types BEFORE sorting!
+    for i in main_items:
+        if i.get('type') == 'casual_tshirt': i['type'] = 'casual_top'
+        if i.get('type') == 'outerwear': i['type'] = 'outer'
+    
     # Sort main_items by priority so essentials are packed first, then by history frequency
     priority_map = {
+        'outer': 0 if temp_min < 15 else 3,
         'evening_dress': 1,
         'business_suit': 1,
         'sport_top': 2,
         'sport_bottom': 2,
         'shoes': 3,
         'bag': 3,
-        'outer': 3,
         'casual_top': 4,
         'casual_bottom': 4
     }
@@ -84,12 +89,6 @@ def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp
     for item in main_items:
         t = item.get('type', '')
         
-        # Normalize types
-        if t == 'casual_tshirt':
-            t = 'casual_top'
-        if t == 'outerwear':
-            t = 'outer'
-            
         # If we already packed max for this specific type (if explicitly constrained), skip
         if t in categories and counts.get(t, 0) >= categories[t]:
             continue
@@ -179,6 +178,12 @@ def calculate_packing(all_items: list, history_freq: dict, temp_min: float, temp
         else:
             recs.append(" - Вечерней одежды: есть в гардеробе, но не подошло по сезону или весу.")
         
+    if temp_min < 15 and counts.get('outer', 0) == 0:
+        if in_wardrobe.get('outer', 0) == 0:
+            recs.append(" - Верхняя одежда: докупить куртку или пуховик по погоде.")
+        else:
+            recs.append(" - Верхняя одежда: есть, но не помещена из-за лимита веса. Обязательно возьмите!")
+            
     if counts.get('business_suit', 0) == 0:
         if in_wardrobe.get('business_suit', 0) == 0:
             recs.append(" - Деловой одежды: докупить строгий деловой костюм.")
