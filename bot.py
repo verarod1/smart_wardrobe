@@ -34,6 +34,7 @@ async def send_welcome(message: types.Message):
         "/style <описание_или_ID> - Напр. /style green skirt или /style 60\n"
         "/delete <ID> - Удалить вещь\n"
         "/edit <ID> <поле> <значение> - Напр. /edit 60 brand Prada\n"
+        "/photo <ID> - Получить фото вещи\n"
         "Отправь мне фото одежды, чтобы автоматически добавить её в базу!"
     )
 
@@ -300,6 +301,39 @@ async def cmd_edit(message: types.Message):
     
     await message.reply(f"✅ Для вещи ID {item_id} обновлено поле {field} = {value}")
 
+@dp.message(Command("photo"))
+async def cmd_photo(message: types.Message):
+    parts = message.text.split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        return await message.reply("Использование: /photo <ID>")
+    
+    item_id = int(parts[1])
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT photo_url FROM items WHERE id = ?", (item_id,))
+    res = c.fetchone()
+    conn.close()
+    
+    if res and res[0]:
+        photo_val = res[0]
+        filename = photo_val.replace('\\', '/').split('/')[-1]
+        data_dir = os.getenv('DATA_DIR', '/data' if os.path.isdir('/data') else os.path.dirname(__file__))
+        actual_path = os.path.join(data_dir, 'photos', filename)
+        
+        if os.path.exists(actual_path):
+            try:
+                await message.reply_photo(FSInputFile(actual_path), caption=f"Вещь #{item_id}")
+                return
+            except Exception as e:
+                logger.error(f"Failed to send photo for item {item_id}: {e}")
+                await message.reply("фото отсутствует")
+                return
+        else:
+            await message.reply("фото отсутствует")
+            return
+
+    await message.reply("фото отсутствует")
+
 @dp.callback_query(F.data.startswith('show_photo_'))
 async def process_show_photo(callback: CallbackQuery):
     item_id_str = callback.data.replace('show_photo_', '')
@@ -440,7 +474,8 @@ async def main():
         types.BotCommand(command="pack", description="Собрать чемодан"),
         types.BotCommand(command="style", description="Собрать лук с вещью"),
         types.BotCommand(command="delete", description="Удалить вещь по ID"),
-        types.BotCommand(command="edit", description="Изменить данные вещи")
+        types.BotCommand(command="edit", description="Изменить данные вещи"),
+        types.BotCommand(command="photo", description="Получить фото вещи")
     ])
 
     await dp.start_polling(bot)
