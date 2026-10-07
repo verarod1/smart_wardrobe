@@ -147,8 +147,8 @@ async def get_outfits(user_prompt: str, available_items: list) -> str:
     
     full_prompt = (
         "You are an AI stylist. The user will ask for outfits containing a specific item. "
-        "You MUST choose items ONLY from the provided wardrobe database below. "
-        "If the user mentions a specific ID (e.g. '70' or 'ID 70'), you MUST use that exact item ID in EVERY SINGLE outfit you generate. Do not generate any outfit that does not contain this specific item. If you cannot make another distinct outfit with it, then return fewer outfits. "
+        "CRITICAL RULE #1: If the user mentions a specific item ID (e.g. '70' or 'ID 70'), EVERY SINGLE OUTFIT you generate MUST contain that exact item ID. If an outfit does NOT contain the requested item, DO NOT output it. You will FAIL your task if any outfit is missing the requested item ID! "
+        "CRITICAL RULE #2: You MUST choose items ONLY from the provided wardrobe database below. "
         "CRITICAL RULE: Outfits MUST be stylistically logical and strictly match in formality. Do NOT mix incompatible styles. "
         "For example, NEVER pair an 'evening_dress' with casual, sport, or beach items (e.g., do not use 'пляжные сланцы'/flip-flops, straw bags, chunky sneakers, or backpacks with elegant dresses). "
         "Evening wear must ONLY be paired with appropriate formal accessories (e.g. elegant shoes, clutches). If you don't have matching formal items, do not generate the outfit. "
