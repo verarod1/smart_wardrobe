@@ -195,7 +195,7 @@ async def cmd_style(message: types.Message):
     outfits_text_full = outfits_text
     
     mentioned_ids = set()
-    rec_match = re.search(r'RECOMMENDED_IDS:\s*([-0-9,\s`]+)', outfits_text_full)
+    rec_match = re.search(r'RECOMMENDED_IDS[^\d]*([\d\s,]+)', outfits_text_full)
     if rec_match:
         # Extract all numbers from the matched line
         mentioned_ids = set(map(int, re.findall(r'\d+', rec_match.group(1))))
