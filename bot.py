@@ -391,9 +391,9 @@ async def handle_text_intent(message: types.Message):
             return await status_msg.edit_text("Я понял, что вы хотите собрать чемодан, но мне нужны все параметры: город, количество дней, дата вылета и лимит веса (в кг).")
             
         await status_msg.delete()
-        # Mock message text to reuse cmd_pack
-        message.text = f"/pack {city} {days} {date_str} {weight}"
-        await cmd_pack(message)
+        # Mock message text to reuse cmd_pack via model_copy
+        mocked_message = message.model_copy(update={"text": f"/pack {city} {days} {date_str} {weight}"})
+        await cmd_pack(mocked_message)
         
     elif intent == "style":
         item = intent_data.get("item")
@@ -401,8 +401,8 @@ async def handle_text_intent(message: types.Message):
             return await status_msg.edit_text("Пожалуйста, уточните, с какой вещью вы хотите собрать образ.")
             
         await status_msg.delete()
-        message.text = f"/style {item}"
-        await cmd_style(message)
+        mocked_message = message.model_copy(update={"text": f"/style {item}"})
+        await cmd_style(mocked_message)
         
     elif intent == "wardrobe":
         await status_msg.delete()
