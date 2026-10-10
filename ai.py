@@ -227,3 +227,50 @@ async def check_city_dress_code(city: str) -> str:
     except Exception as e:
         logger.error(f"GigaChat dress-code error: {e}")
         return "standard"
+
+async def parse_user_intent(prompt: str) -> dict:
+    """Uses GigaChat to parse user intent from free-form text."""
+    if not GIGACHAT_AUTH_KEY:
+        return {"intent": "unknown", "error": "No API key"}
+
+    import datetime
+    current_date_str = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%Y")
+
+    full_prompt = (
+        "You are an AI assistant for a smart wardrobe bot. "
+        "Your task is to analyze the user's message and determine their intent. "
+        "Possible intents: "
+        "'pack' (user wants to pack a suitcase for a trip), "
+        "'style' (user wants to create an outfit with a specific item), "
+        "'wardrobe' (user wants to view their wardrobe). "
+        "If the user asks for anything else (e.g. how to cook something, or general chat), return intent 'unknown'. "
+        "If the intent is 'pack', you MUST extract the following parameters: "
+        "- city (string, e.g. 'Dubai') "
+        "- days (integer, number of days) "
+        f"- date (string, format DD.MM.YYYY). If the user doesn't provide a date, use '{current_date_str}' "
+        "- weight_limit_kg (integer or float, the weight limit for the suitcase in kg). "
+        "If the intent is 'style', extract: "
+        "- item (string, description of the clothing item). "
+        "Return ONLY a valid JSON object. No markdown, no wrappers, just raw JSON. Example output: "
+        '{"intent": "pack", "city": "Dubai", "days": 28, "date": "15.10.2026", "weight_limit_kg": 17} '
+        "or "
+        '{"intent": "style", "item": "зеленая юбка"} '
+        "or "
+        '{"intent": "unknown"}'
+        f"\n\nUser message: {prompt}"
+    )
+    
+    try:
+        text = await call_gigachat_api(full_prompt)
+        text = text.strip()
+        if text.startswith("```json"):
+            text = text[7:]
+        if text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        return json.loads(text.strip())
+    except Exception as e:
+        logger.error(f"Intent parse error: {e}")
+        return {"intent": "unknown", "error": str(e)}
+

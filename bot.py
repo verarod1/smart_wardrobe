@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from db import get_connection
 from weather import get_weather_forecast
 from logic import calculate_packing
-from ai import get_outfits, auto_tag_image_bytes, check_city_dress_code
+from ai import get_outfits, auto_tag_image_bytes, check_city_dress_code, parse_user_intent
 from visuals import create_moodboard
 
 load_dotenv()
@@ -370,6 +370,46 @@ async def process_show_photo(callback: CallbackQuery):
             return
 
     await callback.answer("Фотографии для этой вещи нет в базе", show_alert=True)
+
+@dp.message(F.text & ~F.text.startswith('/'))
+async def handle_text_intent(message: types.Message):
+    status_msg = await message.reply("🤔 Анализирую ваш запрос...")
+    try:
+        intent_data = await parse_user_intent(message.text)
+    except Exception as e:
+        return await status_msg.edit_text("❌ Ошибка при анализе запроса.")
+        
+    intent = intent_data.get("intent", "unknown")
+    
+    if intent == "pack":
+        city = intent_data.get("city")
+        days = intent_data.get("days")
+        date_str = intent_data.get("date")
+        weight = intent_data.get("weight_limit_kg")
+        
+        if not all([city, days, date_str, weight]):
+            return await status_msg.edit_text("Я понял, что вы хотите собрать чемодан, но мне нужны все параметры: город, количество дней, дата вылета и лимит веса (в кг).")
+            
+        await status_msg.delete()
+        # Mock message text to reuse cmd_pack
+        message.text = f"/pack {city} {days} {date_str} {weight}"
+        await cmd_pack(message)
+        
+    elif intent == "style":
+        item = intent_data.get("item")
+        if not item:
+            return await status_msg.edit_text("Пожалуйста, уточните, с какой вещью вы хотите собрать образ.")
+            
+        await status_msg.delete()
+        message.text = f"/style {item}"
+        await cmd_style(message)
+        
+    elif intent == "wardrobe":
+        await status_msg.delete()
+        await cmd_wardrobe(message)
+        
+    else:
+        await status_msg.edit_text("Извините, но я пока не умею выполнять такие запросы. Я могу помочь собрать чемодан, подобрать образ или показать гардероб.")
 
 @dp.message(lambda msg: msg.photo is not None)
 async def handle_photo(message: types.Message):
