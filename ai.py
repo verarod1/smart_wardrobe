@@ -228,36 +228,48 @@ async def check_city_dress_code(city: str) -> str:
         logger.error(f"GigaChat dress-code error: {e}")
         return "standard"
 
-async def parse_user_intent(prompt: str) -> dict:
-    """Uses GigaChat to parse user intent from free-form text."""
+async def parse_user_intent(prompt: str, existing_context: dict = None) -> dict:
+    """Uses GigaChat to parse user intent from free-form text, supporting multi-turn context."""
     if not GIGACHAT_AUTH_KEY:
         return {"intent": "unknown", "error": "No API key"}
 
     import datetime
-    current_date_str = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime("%d.%m.%Y")
+    current_year = datetime.datetime.now().year
+
+    context_str = ""
+    if existing_context:
+        # Filter out nulls from existing context for clarity
+        clean_ctx = {k: v for k, v in existing_context.items() if v is not None}
+        if clean_ctx:
+            context_str = f"\nPREVIOUSLY KNOWN CONTEXT:\n{json.dumps(clean_ctx, ensure_ascii=False)}\nMerge new user inputs into this context. Preserve previously known values unless changed."
 
     full_prompt = (
-        "You are an AI assistant for a smart wardrobe bot. "
-        "Your task is to analyze the user's message and determine their intent. "
-        "Possible intents: "
-        "'pack' (user wants to pack a suitcase for a trip), "
-        "'style' (user wants to create an outfit with a specific item), "
-        "'wardrobe' (user wants to view their wardrobe). "
-        "If the user asks for anything else (e.g. how to cook something, or general chat), return intent 'unknown'. "
-        "If the intent is 'pack', you MUST extract the following parameters: "
-        "- city (string, e.g. 'Dubai') "
-        "- days (integer, number of days) "
-        f"- date (string, format DD.MM.YYYY). If the user doesn't provide a date, use '{current_date_str}' "
-        "- weight_limit_kg (integer or float, the weight limit for the suitcase in kg). "
-        "If the intent is 'style', extract: "
-        "- item (string, description of the clothing item). "
-        "Return ONLY a valid JSON object. No markdown, no wrappers, just raw JSON. Example output: "
-        '{"intent": "pack", "city": "Dubai", "days": 28, "date": "15.10.2026", "weight_limit_kg": 17} '
-        "or "
-        '{"intent": "style", "item": "зеленая юбка"} '
-        "or "
-        '{"intent": "unknown"}'
-        f"\n\nUser message: {prompt}"
+        "You are an AI assistant for a smart wardrobe Telegram bot. "
+        "Analyze the user's message and extract their intent and parameters.\n\n"
+        "POSSIBLE INTENTS:\n"
+        "1. 'pack' — User wants to pack a suitcase or travel (e.g. 'Собери чемодан', 'помоги собрать вещи', 'еду в отпуск', 'собери вещи в Париж').\n"
+        "   CRITICAL RULE: Even if parameters (city, days, weight, date) are missing or incomplete, set intent to 'pack'! Use null for missing parameters.\n"
+        "   Parameters to extract for 'pack':\n"
+        "   - city: string or null (e.g. 'Дубай', 'Париж')\n"
+        "   - days: integer or null (e.g. 14, 28)\n"
+        f"   - date: string or null (format DD.MM.YYYY, e.g. '12.10.{current_year}'). If user writes 'с 12.10', add current year {current_year}. If no date at all, leave null.\n"
+        "   - weight_limit_kg: integer/float or null (e.g. 17, 20)\n\n"
+        "2. 'style' — User wants to create an outfit with an item (e.g. 'подбери образ', 'собери лук', 'с чем носить юбку').\n"
+        "   CRITICAL RULE: Even if no item is mentioned, set intent to 'style'! Use null for item if not specified.\n"
+        "   Parameters to extract for 'style':\n"
+        "   - item: string or null (e.g. 'зеленая юбка', 'ID 60')\n\n"
+        "3. 'wardrobe' — User wants to see their wardrobe (e.g. 'покажи гардероб', 'мои вещи').\n\n"
+        "4. 'unknown' — Any completely unrelated questions (cooking, weather elsewhere, general chatter).\n"
+        f"{context_str}\n\n"
+        "RETURN ONLY VALID JSON (no markdown ticks, no commentary):\n"
+        'Examples:\n'
+        '{"intent": "pack", "city": null, "days": null, "date": null, "weight_limit_kg": null}\n'
+        f'{{"intent": "pack", "city": "Дубай", "days": 14, "date": "12.10.{current_year}", "weight_limit_kg": 17}}\n'
+        '{"intent": "style", "item": "черный пиджак"}\n'
+        '{"intent": "style", "item": null}\n'
+        '{"intent": "wardrobe"}\n'
+        '{"intent": "unknown"}\n\n'
+        f"User message: {prompt}"
     )
     
     try:

@@ -5,6 +5,8 @@ import logging
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from dotenv import load_dotenv
 
 from db import get_connection
@@ -22,6 +24,39 @@ logger = logging.getLogger(__name__)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
+# --- FSM STATES ---
+class DialogState(StatesGroup):
+    clarifying_pack = State()
+    clarifying_style = State()
+
+def get_missing_pack_prompt(data: dict) -> str:
+    missing = []
+    if not data.get("city"):
+        missing.append("• Город назначения")
+    if not data.get("days"):
+        missing.append("• Длительность поездки (в днях)")
+    if not data.get("weight_limit_kg"):
+        missing.append("• Лимит веса багажа (в кг)")
+    if not data.get("date"):
+        missing.append("• Дату вылета (ДД.ММ.ГГГГ, например: 15.10.2026)")
+        
+    known_info = []
+    if data.get("city"):
+        known_info.append(f"Город: {data['city']}")
+    if data.get("days"):
+        known_info.append(f"Дней: {data['days']}")
+    if data.get("weight_limit_kg"):
+        known_info.append(f"Вес: {data['weight_limit_kg']} кг")
+    if data.get("date"):
+        known_info.append(f"Дата: {data['date']}")
+        
+    text = "🧳 **С удовольствием помогу собрать чемодан!**\n\n"
+    if known_info:
+        text += f"Уже записал: {', '.join(known_info)}\n\n"
+    text += "Уточните, пожалуйста:\n" + "\n".join(missing) + "\n\n"
+    text += "💡 _Вы можете написать всё одним сообщением (например: «Дубай, 14 дней, 15.10.2026, 17 кг»)_"
+    return text
+
 # --- HANDLERS ---
 
 @dp.message(Command("start", "help"))
@@ -35,8 +70,19 @@ async def send_welcome(message: types.Message):
         "/delete <ID> - Удалить вещь\n"
         "/edit <ID> <поле> <значение> - Напр. /edit 60 brand Prada\n"
         "/photo <ID> - Получить фото вещи\n"
-        "Отправь мне фото одежды, чтобы автоматически добавить её в базу!"
+        "/cancel - Отменить текущий диалог\n"
+        "Отправь мне фото одежды, чтобы автоматически добавить её в базу!\n\n"
+        "Либо просто напиши мне человеческим языком, например: «Собери чемодан в Дубай на 14 дней» или «Подбери образ»!"
     )
+
+@dp.message(Command("cancel"))
+async def cmd_cancel(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        await message.reply("Нет активного диалога для отмены.")
+        return
+    await state.clear()
+    await message.reply("❌ Диалог отменен.")
 
 @dp.message(Command("wardrobe"))
 async def cmd_wardrobe(message: types.Message):
@@ -371,8 +417,39 @@ async def process_show_photo(callback: CallbackQuery):
 
     await callback.answer("Фотографии для этой вещи нет в базе", show_alert=True)
 
+@dp.message(DialogState.clarifying_pack, F.text & ~F.text.startswith('/'))
+async def handle_pack_clarification(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    status_msg = await message.reply("🤔 Обрабатываю...")
+    try:
+        new_info = await parse_user_intent(message.text, existing_context=data)
+    except Exception as e:
+        logger.error(f"Error in clarification: {e}")
+        new_info = {}
+
+    for k in ["city", "days", "date", "weight_limit_kg"]:
+        v = new_info.get(k)
+        if v is not None:
+            data[k] = v
+
+    if data.get("city") and data.get("days") and data.get("date") and data.get("weight_limit_kg"):
+        await state.clear()
+        await status_msg.delete()
+        mocked_message = message.model_copy(update={"text": f"/pack {data['city']} {data['days']} {data['date']} {data['weight_limit_kg']}"})
+        await cmd_pack(mocked_message)
+    else:
+        await state.update_data(data)
+        await status_msg.edit_text(get_missing_pack_prompt(data))
+
+@dp.message(DialogState.clarifying_style, F.text & ~F.text.startswith('/'))
+async def handle_style_clarification(message: types.Message, state: FSMContext):
+    item = message.text.strip()
+    await state.clear()
+    mocked_message = message.model_copy(update={"text": f"/style {item}"})
+    await cmd_style(mocked_message)
+
 @dp.message(F.text & ~F.text.startswith('/'))
-async def handle_text_intent(message: types.Message):
+async def handle_text_intent(message: types.Message, state: FSMContext):
     status_msg = await message.reply("🤔 Анализирую ваш запрос...")
     try:
         intent_data = await parse_user_intent(message.text)
@@ -386,9 +463,12 @@ async def handle_text_intent(message: types.Message):
         days = intent_data.get("days")
         date_str = intent_data.get("date")
         weight = intent_data.get("weight_limit_kg")
-        
-        if not all([city, days, date_str, weight]):
-            return await status_msg.edit_text("Я понял, что вы хотите собрать чемодан, но мне нужны все параметры: город, количество дней, дата вылета и лимит веса (в кг).")
+
+        if not (city and days and date_str and weight):
+            await state.set_state(DialogState.clarifying_pack)
+            data = {"city": city, "days": days, "date": date_str, "weight_limit_kg": weight}
+            await state.set_data(data)
+            return await status_msg.edit_text(get_missing_pack_prompt(data))
             
         await status_msg.delete()
         # Mock message text to reuse cmd_pack via model_copy
@@ -398,7 +478,11 @@ async def handle_text_intent(message: types.Message):
     elif intent == "style":
         item = intent_data.get("item")
         if not item:
-            return await status_msg.edit_text("Пожалуйста, уточните, с какой вещью вы хотите собрать образ.")
+            await state.set_state(DialogState.clarifying_style)
+            return await status_msg.edit_text(
+                "👗 **С удовольствием подберу образ!**\n\n"
+                "С какой вещью из вашего гардероба составить лук? Укажите название вещи (например: *белая футболка*, *синяя юбка*) или её ID:"
+            )
             
         await status_msg.delete()
         mocked_message = message.model_copy(update={"text": f"/style {item}"})
@@ -515,7 +599,8 @@ async def main():
         types.BotCommand(command="style", description="Собрать лук с вещью"),
         types.BotCommand(command="delete", description="Удалить вещь по ID"),
         types.BotCommand(command="edit", description="Изменить данные вещи"),
-        types.BotCommand(command="photo", description="Получить фото вещи")
+        types.BotCommand(command="photo", description="Получить фото вещи"),
+        types.BotCommand(command="cancel", description="Отменить текущий диалог")
     ])
 
     await dp.start_polling(bot)
