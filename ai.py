@@ -158,7 +158,7 @@ async def get_outfits(user_prompt: str, available_items: list) -> str:
         "Out of the generated outfits, select ONE as the 'Recommended Outfit'. "
         "For the Recommended Outfit ONLY, you MUST include a line exactly like this at the very end of your response, with NO markdown formatting around it: "
         "RECOMMENDED_IDS: ID1, ID2, ID3 (replace with actual numbers). "
-        "Format the output text beautifully for Telegram (Markdown). When listing the items in an outfit, ALWAYS include a short descriptive name in parentheses next to the item category, based on its color, type, and style. For example: *Юбка (зеленая юбка миди): ID 72 | Топ (белая футболка): ID 64 | Обувь (сандалии на каблуке): ID 88*. "
+        "Format the output text beautifully for Telegram as clean plain text without markdown asterisks (do NOT use ** or *). When listing the items in an outfit, ALWAYS include a short descriptive name in parentheses next to the item category, based on its color, type, and style. For example: Юбка (зеленая юбка миди): ID 72 | Топ (белая футболка): ID 64 | Обувь (сандалии на каблуке): ID 88. "
         "IMPORTANT: Your response (the descriptions, titles, tips, etc.) MUST be entirely in conversational Russian. "
         "HOWEVER, do NOT translate the names of clothing types, categories, or colors (e.g. keep 'casual_top', 'white', 'bottom' exactly as they are in the database).\n\n"
         f"WARDROBE ITEMS:\n{items_str}\n\nUser Request: {user_prompt}"

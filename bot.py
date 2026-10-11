@@ -50,11 +50,11 @@ def get_missing_pack_prompt(data: dict) -> str:
     if data.get("date"):
         known_info.append(f"Дата: {data['date']}")
         
-    text = "🧳 **С удовольствием помогу собрать чемодан!**\n\n"
+    text = "🧳 С удовольствием помогу собрать чемодан!\n\n"
     if known_info:
         text += f"Уже записал: {', '.join(known_info)}\n\n"
     text += "Уточните, пожалуйста:\n" + "\n".join(missing) + "\n\n"
-    text += "💡 _Вы можете написать всё одним сообщением (например: «Дубай, 14 дней, 15.10.2026, 17 кг»)_"
+    text += "💡 Вы можете написать всё одним сообщением (например: Дубай, 14 дней, 15.10.2026, 17 кг)"
     return text
 
 # --- HANDLERS ---
@@ -147,7 +147,7 @@ async def cmd_pack(message: types.Message):
     response = f"🧳 Собрано {len(packed)} вещей. Общий вес: {total_weight / 1000} кг.\n\n"
     
     if recommendations:
-        response += f"💡 **Рекомендации стилиста (чего не хватает):**\n{recommendations}\n\n"
+        response += f"💡 Рекомендации стилиста (чего не хватает):\n{recommendations}\n\n"
         
     categorized = {}
     for p in packed:
@@ -236,6 +236,8 @@ async def cmd_style(message: types.Message):
     conn.close()
     
     outfits_text = await get_outfits(prompt, available_items)
+    # Clean up double asterisks from AI output so they don't look like raw markdown
+    outfits_text = outfits_text.replace('**', '')
     
     # Save full text for ID extraction before chunked sending consumes it
     outfits_text_full = outfits_text
@@ -480,8 +482,8 @@ async def handle_text_intent(message: types.Message, state: FSMContext):
         if not item:
             await state.set_state(DialogState.clarifying_style)
             return await status_msg.edit_text(
-                "👗 **С удовольствием подберу образ!**\n\n"
-                "С какой вещью из вашего гардероба составить лук? Укажите название вещи (например: *белая футболка*, *синяя юбка*) или её ID:"
+                "👗 С удовольствием подберу образ!\n\n"
+                "С какой вещью из вашего гардероба составить лук? Укажите название вещи (например: белая футболка, синяя юбка) или её ID:"
             )
             
         await status_msg.delete()
